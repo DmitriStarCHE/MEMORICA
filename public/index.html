@@ -279,6 +279,54 @@
             margin: 20px 0;
         }
 
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+        }
+
+        .notification.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #2ecc71;
+        }
+
+        .notification.error {
+            background: #e74c3c;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -304,6 +352,8 @@
     </style>
 </head>
 <body>
+    <div class="notification" id="notification"></div>
+
     <div class="container">
         <header>
             <h1>🚀 WebAR Admin Panel</h1>
@@ -334,6 +384,10 @@
                     </div>
                     <button type="submit">📤 Загрузить маркер</button>
                 </form>
+                <div class="loading" id="markerLoading">
+                    <div class="spinner"></div>
+                    <p>Загрузка маркера...</p>
+                </div>
             </div>
             
             <div class="markers-list">
@@ -385,6 +439,10 @@
                     
                     <button type="submit">📤 Добавить контент</button>
                 </form>
+                <div class="loading" id="contentLoading">
+                    <div class="spinner"></div>
+                    <p>Загрузка контента...</p>
+                </div>
             </div>
             
             <div class="content-list">
@@ -427,18 +485,19 @@
             <div class="upload-section">
                 <h3>🔗 Ссылки для доступа:</h3>
                 <div style="margin: 20px 0;">
-                    <p><strong>📍 Локальный доступ:</strong></p>
+                    <p><strong>📍 Текущий сервер:</strong></p>
                     <code style="background: #f8f9fa; padding: 10px; border-radius: 5px; display: block; margin: 10px 0;">
-                        http://localhost:8080
+                        <span id="currentUrl">Загрузка...</span>
                     </code>
                     
-                    <p><strong>🌐 Сетевой доступ (для телефона в той же сети Wi-Fi):</strong></p>
+                    <p><strong>🌐 Прямая ссылка на AR просмотрщик:</strong></p>
                     <code style="background: #f8f9fa; padding: 10px; border-radius: 5px; display: block; margin: 10px 0;">
-                        http://<span id="localIp">YOUR_IP</span>:8080
+                        <span id="arViewerUrl">Загрузка...</span>
                     </code>
                 </div>
                 
                 <button onclick="showMobileInstructions()">📖 Инструкция для мобильных</button>
+                <button onclick="copyCurrentUrl()">📋 Скопировать ссылку</button>
             </div>
         </div>
     </div>
@@ -447,6 +506,7 @@
         class WebARAdmin {
             constructor() {
                 this.markers = [];
+                this.currentUrl = window.location.origin;
                 this.init();
             }
 
@@ -454,7 +514,7 @@
                 this.setupEventListeners();
                 await this.loadMarkers();
                 this.populateMarkerSelects();
-                this.showLocalIP();
+                this.updateUrls();
             }
 
             setupEventListeners() {
@@ -501,12 +561,20 @@
             async loadMarkers() {
                 try {
                     const response = await fetch('/api/markers');
+                    
+                    // Проверяем Content-Type ответа
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Server returned HTML instead of JSON: ${text.substring(0, 100)}`);
+                    }
+
                     this.markers = await response.json();
                     this.renderMarkers();
                     this.updateMarkersCount();
                 } catch (error) {
                     console.error('❌ Ошибка загрузки маркеров:', error);
-                    this.showError('Ошибка загрузки маркеров: ' + error.message);
+                    this.showNotification('❌ Ошибка загрузки маркеров: ' + this.extractErrorMessage(error), 'error');
                 }
             }
 
@@ -562,9 +630,12 @@
                 const fileInput = document.getElementById('markerImage');
                 
                 if (!fileInput.files[0]) {
-                    this.showError('❌ Выберите файл изображения');
+                    this.showNotification('❌ Выберите файл изображения', 'error');
                     return;
                 }
+
+                // Показываем индикатор загрузки
+                this.showLoading('markerLoading', true);
 
                 const formData = new FormData();
                 formData.append('name', name);
@@ -577,19 +648,29 @@
                         body: formData
                     });
 
+                    // Проверяем Content-Type ответа
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Server returned HTML instead of JSON: ${text.substring(0, 100)}`);
+                    }
+
                     const result = await response.json();
                     
                     if (result.success) {
-                        this.showSuccess('✅ Маркер успешно загружен! ID: ' + result.markerId);
+                        this.showNotification('✅ Маркер успешно загружен! ID: ' + result.markerId, 'success');
                         document.getElementById('markerForm').reset();
                         await this.loadMarkers();
                         this.populateMarkerSelects();
                     } else {
-                        this.showError('❌ Ошибка: ' + result.error);
+                        this.showNotification('❌ Ошибка: ' + result.error, 'error');
                     }
                 } catch (error) {
                     console.error('❌ Ошибка загрузки:', error);
-                    this.showError('❌ Ошибка загрузки маркера: ' + error.message);
+                    this.showNotification('❌ Ошибка загрузки маркера: ' + this.extractErrorMessage(error), 'error');
+                } finally {
+                    // Скрываем индикатор загрузки
+                    this.showLoading('markerLoading', false);
                 }
             }
 
@@ -602,14 +683,17 @@
                 const rotation = document.getElementById('contentRotation').value;
 
                 if (!markerId) {
-                    this.showError('❌ Сначала выберите маркер');
+                    this.showNotification('❌ Сначала выберите маркер', 'error');
                     return;
                 }
 
                 if (!fileInput.files[0]) {
-                    this.showError('❌ Выберите файл контента');
+                    this.showNotification('❌ Выберите файл контента', 'error');
                     return;
                 }
+
+                // Показываем индикатор загрузки
+                this.showLoading('contentLoading', true);
 
                 const formData = new FormData();
                 formData.append('markerId', markerId);
@@ -625,24 +709,42 @@
                         body: formData
                     });
 
+                    // Проверяем Content-Type ответа
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Server returned HTML instead of JSON: ${text.substring(0, 100)}`);
+                    }
+
                     const result = await response.json();
                     
                     if (result.success) {
-                        this.showSuccess('✅ Контент успешно добавлен!');
+                        this.showNotification('✅ Контент успешно добавлен!', 'success');
                         document.getElementById('contentForm').reset();
                         this.loadContentForMarker(markerId);
                     } else {
-                        this.showError('❌ Ошибка: ' + result.error);
+                        this.showNotification('❌ Ошибка: ' + result.error, 'error');
                     }
                 } catch (error) {
                     console.error('❌ Ошибка загрузки:', error);
-                    this.showError('❌ Ошибка загрузки контента: ' + error.message);
+                    this.showNotification('❌ Ошибка загрузки контента: ' + this.extractErrorMessage(error), 'error');
+                } finally {
+                    // Скрываем индикатор загрузки
+                    this.showLoading('contentLoading', false);
                 }
             }
 
             async loadContentForMarker(markerId) {
                 try {
                     const response = await fetch(`/api/markers/${markerId}/content`);
+                    
+                    // Проверяем Content-Type ответа
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Server returned HTML instead of JSON: ${text.substring(0, 100)}`);
+                    }
+
                     const contentList = await response.json();
                     
                     const container = document.getElementById('contentList');
@@ -667,7 +769,7 @@
                     });
                 } catch (error) {
                     console.error('❌ Ошибка загрузки контента:', error);
-                    this.showError('Ошибка загрузки контента: ' + error.message);
+                    this.showNotification('Ошибка загрузки контента: ' + this.extractErrorMessage(error), 'error');
                 }
             }
 
@@ -683,11 +785,12 @@
             startPreview(markerId = null) {
                 const selectedMarkerId = markerId || document.getElementById('previewMarker').value;
                 if (!selectedMarkerId) {
-                    this.showError('❌ Выберите маркер для просмотра');
+                    this.showNotification('❌ Выберите маркер для просмотра', 'error');
                     return;
                 }
 
-                window.open(`/ar-viewer.html?marker=${selectedMarkerId}`, '_blank');
+                const arViewerUrl = `${this.currentUrl}/ar-viewer.html?marker=${selectedMarkerId}`;
+                window.open(arViewerUrl, '_blank');
             }
 
             viewMarker(markerId) {
@@ -702,18 +805,25 @@
                         method: 'DELETE'
                     });
 
+                    // Проверяем Content-Type ответа
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Server returned HTML instead of JSON: ${text.substring(0, 100)}`);
+                    }
+
                     const result = await response.json();
                     
                     if (result.success) {
-                        this.showSuccess('✅ Маркер удален');
+                        this.showNotification('✅ Маркер удален', 'success');
                         await this.loadMarkers();
                         this.populateMarkerSelects();
                     } else {
-                        this.showError('❌ Ошибка удаления: ' + result.error);
+                        this.showNotification('❌ Ошибка удаления: ' + result.error, 'error');
                     }
                 } catch (error) {
                     console.error('❌ Ошибка удаления:', error);
-                    this.showError('❌ Ошибка удаления маркера: ' + error.message);
+                    this.showNotification('❌ Ошибка удаления маркера: ' + this.extractErrorMessage(error), 'error');
                 }
             }
 
@@ -725,56 +835,80 @@
                         method: 'DELETE'
                     });
 
+                    // Проверяем Content-Type ответа
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Server returned HTML instead of JSON: ${text.substring(0, 100)}`);
+                    }
+
                     const result = await response.json();
                     
                     if (result.success) {
-                        this.showSuccess('✅ Контент удален');
+                        this.showNotification('✅ Контент удален', 'success');
                         // Перезагружаем список контента
                         const currentMarker = document.getElementById('contentMarker').value;
                         if (currentMarker) {
                             this.loadContentForMarker(currentMarker);
                         }
                     } else {
-                        this.showError('❌ Ошибка удаления: ' + result.error);
+                        this.showNotification('❌ Ошибка удаления: ' + result.error, 'error');
                     }
                 } catch (error) {
                     console.error('❌ Ошибка удаления:', error);
-                    this.showError('❌ Ошибка удаления контента: ' + error.message);
+                    this.showNotification('❌ Ошибка удаления контента: ' + this.extractErrorMessage(error), 'error');
                 }
             }
 
-            showLocalIP() {
-                // Пытаемся получить локальный IP
-                fetch('/api/status')
-                    .then(response => response.json())
-                    .then(data => {
-                        // В реальном приложении здесь можно получить IP сервера
-                        document.getElementById('localIp').textContent = 'YOUR_LOCAL_IP';
-                    })
-                    .catch(error => {
-                        console.error('Ошибка получения статуса:', error);
-                    });
+            updateUrls() {
+                document.getElementById('currentUrl').textContent = this.currentUrl;
+                document.getElementById('arViewerUrl').textContent = `${this.currentUrl}/ar-viewer.html`;
             }
 
-            showSuccess(message) {
-                alert(message);
+            showNotification(message, type = 'info') {
+                const notification = document.getElementById('notification');
+                notification.textContent = message;
+                notification.className = `notification ${type} show`;
+                
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 5000);
             }
 
-            showError(message) {
-                alert(message);
+            showLoading(loadingId, show) {
+                const loadingElement = document.getElementById(loadingId);
+                loadingElement.style.display = show ? 'block' : 'none';
+            }
+
+            extractErrorMessage(error) {
+                if (error.message.includes('HTML instead of JSON')) {
+                    return 'Сервер вернул HTML вместо JSON. Возможно, endpoint не существует.';
+                }
+                return error.message;
             }
         }
 
+        // Глобальные функции
         function showMobileInstructions() {
+            const currentUrl = window.location.origin;
             alert(`📱 Инструкция для мобильных устройств:
 
-1. 📶 Убедитесь, что телефон подключен к той же Wi-Fi сети, что и компьютер
+1. 📶 Убедитесь, что телефон подключен к интернету
 2. 🌐 На телефоне откройте браузер Chrome
-3. 🔗 Введите адрес: http://YOUR_LOCAL_IP:8080
+3. 🔗 Введите адрес: ${currentUrl}
 4. 📷 Разрешите доступ к камере при запросе
 5. 🎯 Наведите камеру на маркер для отображения AR контента
 
 💡 Совет: Используйте изображения с хорошим контрастом для лучшего распознавания маркеров.`);
+        }
+
+        function copyCurrentUrl() {
+            const currentUrl = window.location.origin;
+            navigator.clipboard.writeText(currentUrl).then(() => {
+                admin.showNotification('✅ Ссылка скопирована в буфер обмена!', 'success');
+            }).catch(err => {
+                admin.showNotification('❌ Не удалось скопировать ссылку', 'error');
+            });
         }
 
         // Инициализация при загрузке страницы
