@@ -9,8 +9,9 @@
     <meta name="theme-color" content="#000000">
     <title>WebAR Viewer</title>
     
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <!-- Подключаем A-Frame и AR.js с CDN который точно работает -->
+    <script src="https://cdn.jsdelivr.net/npm/aframe@1.2.0/dist/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.0/aframe/build/aframe-ar.min.js"></script>
     
     <style>
         * {
@@ -53,15 +54,11 @@
             color: #3498db;
         }
         
-        .loading h2 {
-            font-size: 1.5em;
-            margin-bottom: 10px;
-        }
-        
         #status {
             font-size: 1.1em;
             margin: 20px 0;
             min-height: 60px;
+            max-width: 400px;
         }
         
         .error {
@@ -111,7 +108,6 @@
         
         button:hover {
             background: #27ae60;
-            transform: scale(1.05);
         }
         
         .reload-btn {
@@ -154,25 +150,26 @@
             height: 100%;
         }
         
-        .debug-info {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            z-index: 1002;
-            display: none;
+        .tips {
+            background: #34495e;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        .tips ul {
+            text-align: left;
+            margin: 10px 0;
+            padding-left: 20px;
         }
     </style>
 </head>
 <body>
     <div class="loading" id="loading">
         <h1>🌐 WebAR Viewer</h1>
-        <h2>Дополненная реальность в браузере</h2>
         
-        <div id="status">Подготовка системы...</div>
+        <div id="status">Проверка поддержки браузера...</div>
         
         <div class="progress-bar">
             <div class="progress" id="progress"></div>
@@ -185,24 +182,45 @@
         </div>
         
         <div class="error" id="error"></div>
+        
+        <div class="tips" id="loadingTips">
+            <h4>💡 Советы для успешного запуска:</h4>
+            <ul>
+                <li>Используйте Chrome на Android или Safari на iOS</li>
+                <li>Разрешите доступ к камере при запросе</li>
+                <li>Убедитесь в хорошем освещении</li>
+                <li>Используйте стабильное интернет-соединение</li>
+            </ul>
+        </div>
     </div>
 
     <button class="reload-btn" onclick="window.location.reload()">↻</button>
-    
-    <div class="debug-info" id="debugInfo"></div>
 
     <div class="instructions" id="instructions">
         🎯 Наведите камеру на маркер для отображения AR контента
     </div>
 
+    <!-- A-Frame Scene с оптимизированными настройками -->
     <a-scene 
         embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        renderer="logarithmicDepthBuffer: true; antialias: true;"
+        arjs="sourceType: webcam; 
+              debugUIEnabled: false; 
+              detectionMode: mono; 
+              matrixCodeType: 3x3; 
+              maxDetectionRate: 30;
+              cameraParametersUrl: https://cdn.jsdelivr.net/npm/ar.js@3.4.0/data/camera_para.dat;"
+        renderer="colorManagement: true; 
+                  physicallyCorrectLights: false;
+                  antialias: false;
+                  precision: medium;"
         vr-mode-ui="enabled: false"
         device-orientation-permission-ui="enabled: false"
         id="arScene"
         style="display: none;">
+        
+        <!-- Простой свет -->
+        <a-light type="ambient" color="#FFFFFF" intensity="0.6"></a-light>
+        <a-light type="directional" color="#FFFFFF" position="0 1 1" intensity="0.8"></a-light>
         
         <a-entity camera></a-entity>
     </a-scene>
@@ -223,11 +241,11 @@
             }
 
             async init() {
-                this.updateStatus('Инициализация WebAR...');
+                this.updateStatus('Проверка поддержки браузера...');
                 this.updateProgress(10);
                 
                 if (!this.markerId) {
-                    this.showError('❌ Ошибка: не указан ID маркера в URL<br>Пример: /ar-viewer.html?marker=1');
+                    this.showError('❌ Ошибка: не указан ID маркера<br>Добавьте ?marker=1 к URL');
                     return;
                 }
 
@@ -254,7 +272,7 @@
                         📱 Рекомендуем использовать:<br>
                         • Chrome для Android<br>
                         • Safari для iOS 11+<br>
-                        • Последнюю версию Firefox
+                        • Firefox Mobile
                     `);
                     return false;
                 }
@@ -262,23 +280,12 @@
                 if (!hasWebGL) {
                     this.showError(`
                         ❌ WebGL не поддерживается<br><br>
-                        AR требует поддержку WebGL для работы.<br>
-                        Обновите браузер или включите WebGL в настройках.
+                        AR требует поддержку WebGL для работы с 3D графикой
                     `);
                     return false;
                 }
                 
-                // Проверяем HTTPS для iOS
-                if (this.isIOS && window.location.protocol !== 'https:') {
-                    this.showError(`
-                        📱 Для iOS необходим HTTPS<br><br>
-                        Используйте туннель с HTTPS (Serveo) или <br>
-                        разместите на хостинге с SSL сертификатом
-                    `);
-                    return false;
-                }
-                
-                this.debug('✅ Браузер поддерживает WebAR');
+                console.log('✅ Браузер поддерживает WebAR');
                 return true;
             }
 
@@ -300,16 +307,23 @@
                     const response = await fetch(`/api/ar-scene/${this.markerId}`);
                     
                     if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        throw new Error(`Ошибка сервера: ${response.status}`);
+                    }
+                    
+                    // Проверяем, что ответ JSON
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Сервер вернул некорректные данные`);
                     }
                     
                     this.sceneData = await response.json();
                     
                     if (!this.sceneData.marker) {
-                        throw new Error('Маркер не найден в базе данных');
+                        throw new Error('Маркер не найден');
                     }
                     
-                    this.debug('✅ Данные сцены загружены');
+                    console.log('✅ Данные сцены загружены:', this.sceneData);
                     this.updateProgress(60);
                     
                 } catch (error) {
@@ -323,22 +337,25 @@
                 this.updateProgress(80);
                 
                 try {
-                    // Создаем тестовый stream для проверки разрешений
+                    // Быстрая проверка доступа к камере
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         video: {
-                            facingMode: 'environment', // Предпочитаем заднюю камеру
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 },
-                            aspectRatio: { ideal: 1.7777777778 }
+                            facingMode: 'environment',
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
                         }
                     });
                     
-                    // Останавливаем тестовый stream
+                    // Немедленно останавливаем stream
                     stream.getTracks().forEach(track => track.stop());
                     
-                    this.debug('✅ Доступ к камере разрешен');
+                    console.log('✅ Доступ к камере разрешен');
                     this.updateProgress(100);
-                    this.setupARScene();
+                    
+                    // Даем время для прогресс-бара
+                    setTimeout(() => {
+                        this.setupARScene();
+                    }, 500);
                     
                 } catch (error) {
                     console.error('❌ Ошибка доступа к камере:', error);
@@ -348,7 +365,7 @@
                     } else if (error.name === 'NotFoundError') {
                         this.showError('📷 Камера не найдена на устройстве');
                     } else if (error.name === 'NotSupportedError') {
-                        this.showError('📷 Камера не поддерживается в этом браузере');
+                        this.showError('📷 Камера не поддерживается');
                     } else {
                         this.showError(`Ошибка камеры: ${error.message}`);
                     }
@@ -358,132 +375,93 @@
             showCameraPermissionRequest() {
                 document.getElementById('cameraPermission').style.display = 'block';
                 this.updateStatus('Ожидание разрешения доступа к камере...');
-                
-                // Показываем подсказку для разных платформ
-                let helpText = 'Нажмите "Разрешить камеру" и разрешите доступ в диалоге браузера';
-                if (this.isIOS) {
-                    helpText += '<br>На iOS: Настройки > Safari > Камера > Разрешить';
-                } else if (this.isAndroid) {
-                    helpText += '<br>На Android: Настройки приложения > Разрешения > Камера';
-                }
-                
-                document.getElementById('cameraPermission').innerHTML += `<p style="font-size: 14px; margin-top: 10px;">${helpText}</p>`;
             }
 
             setupARScene() {
-                this.updateStatus('Настройка AR сцены...');
+                this.updateStatus('Запуск AR сцены...');
                 
                 const scene = document.getElementById('arScene');
-                scene.style.display = 'block';
-
+                
                 // Очищаем предыдущие маркеры
                 const oldMarkers = scene.querySelectorAll('a-marker');
                 oldMarkers.forEach(marker => marker.remove());
 
-                // Создаем маркер с оптимизацией
+                // Создаем маркер с упрощенными настройками
                 const marker = document.createElement('a-marker');
                 marker.setAttribute('type', 'pattern');
                 marker.setAttribute('url', this.sceneData.marker.pattUrl);
                 marker.setAttribute('emitevents', 'true');
-                marker.setAttribute('smooth', 'true');
-                marker.setAttribute('smoothCount', '5');
-                marker.setAttribute('smoothTolerance', '0.01');
-                marker.setAttribute('smoothThreshold', '2');
+                marker.setAttribute('smooth', 'false'); // Отключаем сглаживание для производительности
 
                 // Добавляем контент или тестовый объект
                 if (this.sceneData.contents && this.sceneData.contents.length > 0) {
-                    this.debug(`✅ Добавление ${this.sceneData.contents.length} объектов контента`);
+                    console.log(`✅ Добавление ${this.sceneData.contents.length} объектов контента`);
                     this.sceneData.contents.forEach((content, index) => {
-                        const entity = this.createContentEntity(content, index);
+                        const entity = this.createOptimizedContentEntity(content, index);
                         marker.appendChild(entity);
                     });
                 } else {
-                    this.debug('ℹ️ Контент не найден, добавляем тестовый куб');
-                    // Тестовый куб если контента нет
+                    console.log('ℹ️ Контент не найден, добавляем тестовый куб');
+                    // Простой тестовый куб
                     const testCube = document.createElement('a-box');
                     testCube.setAttribute('position', '0 0.5 0');
-                    testCube.setAttribute('rotation', '0 45 45');
                     testCube.setAttribute('color', '#4CC3D9');
-                    testCube.setAttribute('scale', '0.5 0.5 0.5');
-                    testCube.setAttribute('animation', 'property: rotation; to: 0 405 45; loop: true; dur: 5000');
+                    testCube.setAttribute('scale', '0.3 0.3 0.3');
                     marker.appendChild(testCube);
-                    
-                    const text = document.createElement('a-text');
-                    text.setAttribute('value', 'Тестовый AR');
-                    text.setAttribute('position', '0 1.2 0');
-                    text.setAttribute('align', 'center');
-                    text.setAttribute('color', '#FFF');
-                    marker.appendChild(text);
                 }
 
                 scene.appendChild(marker);
 
-                // Обработчики событий маркера
+                // Обработчики событий
                 marker.addEventListener('markerFound', () => {
-                    this.debug('🎯 Маркер распознан!');
+                    console.log('🎯 Маркер распознан!');
                     document.getElementById('instructions').style.display = 'block';
-                    
-                    // Вибрация на мобильных (если поддерживается)
-                    if (navigator.vibrate) {
-                        navigator.vibrate(100);
-                    }
                 });
 
                 marker.addEventListener('markerLost', () => {
-                    this.debug('🔍 Маркер потерян');
-                    document.getElementById('instructions').style.display = 'block';
+                    console.log('🔍 Маркер потерян');
                 });
 
-                // Обработка ошибок AR.js
-                scene.addEventListener('arjs-error', (event) => {
-                    console.error('AR.js Error:', event.detail);
-                    this.showError(`AR ошибка: ${event.detail}`);
-                });
-
-                // Скрываем загрузку
+                // Показываем сцену
+                scene.style.display = 'block';
+                
+                // Скрываем загрузку через 1 секунду
                 setTimeout(() => {
                     this.hideLoading();
-                }, 1500);
+                }, 1000);
+
+                // Таймаут на случай проблем
+                setTimeout(() => {
+                    if (document.getElementById('loading').style.display !== 'none') {
+                        this.showError('⚠️ Долгая загрузка. Проверьте подключение и попробуйте снова.');
+                    }
+                }, 15000);
             }
 
-            createContentEntity(content, index) {
+            createOptimizedContentEntity(content, index) {
                 const entity = document.createElement('a-entity');
                 
                 switch (content.contentType) {
                     case 'model':
-                        entity.setAttribute('gltf-model', content.contentUrl);
-                        entity.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 10000');
-                        this.debug(`✅ 3D модель: ${content.contentUrl}`);
+                        entity.setAttribute('gltf-model', {
+                            src: content.contentUrl,
+                            onError: this.onModelError.bind(this)
+                        });
                         break;
                         
                     case 'video':
-                        const videoId = `video-${Date.now()}-${index}`;
-                        this.createVideoElement(content.contentUrl, videoId);
-                        entity.setAttribute('geometry', 'primitive: plane; width: 1.6; height: 0.9');
-                        entity.setAttribute('material', `src: #${videoId}; transparent: true`);
-                        entity.setAttribute('animation', {
-                            property: 'material.opacity',
-                            to: '1',
-                            dur: '1000',
-                            delay: index * 200
+                        entity.setAttribute('geometry', 'primitive: plane; width: 1.0; height: 0.6');
+                        entity.setAttribute('material', {
+                            src: content.contentUrl,
+                            transparent: true
                         });
-                        this.debug(`✅ Видео: ${content.contentUrl}`);
                         break;
                         
                     case 'image':
-                        entity.setAttribute('geometry', 'primitive: plane; width: 1.5; height: 1.5');
+                        entity.setAttribute('geometry', 'primitive: plane; width: 1.0; height: 1.0');
                         entity.setAttribute('material', {
-                            src: content.contentUrl,
-                            transparent: true,
-                            opacity: 0
+                            src: content.contentUrl
                         });
-                        entity.setAttribute('animation', {
-                            property: 'material.opacity',
-                            to: '1',
-                            dur: '1000',
-                            delay: index * 200
-                        });
-                        this.debug(`✅ Изображение: ${content.contentUrl}`);
                         break;
                 }
 
@@ -492,55 +470,16 @@
                 entity.setAttribute('scale', content.scale);
                 entity.setAttribute('rotation', content.rotation);
 
-                // Добавляем интерактивность
-                entity.setAttribute('class', 'clickable');
-                entity.setAttribute('cursor', 'rayOrigin: mouse');
-                
-                entity.addEventListener('click', () => {
-                    this.onContentClick(content);
-                });
-
                 return entity;
             }
 
-            createVideoElement(src, id) {
-                const video = document.createElement('video');
-                video.id = id;
-                video.setAttribute('autoplay', 'true');
-                video.setAttribute('loop', 'true');
-                video.setAttribute('playsinline', 'true');
-                video.setAttribute('webkit-playsinline', 'true');
-                video.setAttribute('muted', 'true');
-                video.setAttribute('crossorigin', 'anonymous');
-                video.style.display = 'none';
-                video.src = src;
-                
-                video.addEventListener('loadeddata', () => {
-                    this.debug(`✅ Видео загружено: ${src}`);
-                });
-                
-                video.addEventListener('error', (e) => {
-                    this.debug(`❌ Ошибка загрузки видео: ${src}`);
-                });
-                
-                document.body.appendChild(video);
-            }
-
-            onContentClick(content) {
-                this.debug(`🖱️ Клик по контенту: ${content.contentType}`);
-                
-                // Вибрация на мобильных
-                if (navigator.vibrate) {
-                    navigator.vibrate(50);
-                }
-                
-                // Можно добавить дополнительные действия при клике
-                // Например, анимации, звуки и т.д.
+            onModelError(evt) {
+                console.error('❌ Ошибка загрузки 3D модели:', evt.detail);
             }
 
             updateStatus(message) {
                 document.getElementById('status').textContent = message;
-                this.debug(message);
+                console.log('📝 Status:', message);
             }
 
             updateProgress(percent) {
@@ -550,7 +489,7 @@
             hideLoading() {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('instructions').style.display = 'block';
-                this.debug('✅ AR сцена готова');
+                console.log('✅ AR сцена готова');
             }
 
             showError(message) {
@@ -558,18 +497,6 @@
                 document.getElementById('error').style.display = 'block';
                 document.getElementById('status').style.display = 'none';
                 document.getElementById('progress').style.background = '#e74c3c';
-            }
-
-            debug(message) {
-                console.log('🔧 WebAR Debug:', message);
-                const debugInfo = document.getElementById('debugInfo');
-                debugInfo.innerHTML = message;
-                debugInfo.style.display = 'block';
-                
-                // Авто-скрытие debug сообщений через 5 секунд
-                setTimeout(() => {
-                    debugInfo.style.display = 'none';
-                }, 5000);
             }
         }
 
@@ -583,26 +510,25 @@
             new WebARViewer();
         });
 
+        // Обработчики ошибок AR.js
+        window.addEventListener('arjs-nft-loaded', (e) => {
+            console.log('✅ AR.js NFT загружен');
+        });
+
+        window.addEventListener('arjs-video-loaded', (e) => {
+            console.log('✅ Видео для AR загружено');
+        });
+
+        window.addEventListener('arjs-error', (e) => {
+            console.error('❌ AR.js ошибка:', e.detail);
+        });
+
         // Предотвращаем масштабирование на мобильных
         document.addEventListener('touchmove', (e) => {
             if (e.scale !== 1) {
                 e.preventDefault();
             }
         }, { passive: false });
-
-        // Предотвращаем контекстное меню
-        document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-        });
-
-        // Глобальная обработка ошибок
-        window.addEventListener('error', (event) => {
-            console.error('Global error:', event.error);
-        });
-
-        window.addEventListener('unhandledrejection', (event) => {
-            console.error('Unhandled promise rejection:', event.reason);
-        });
     </script>
 </body>
 </html>
