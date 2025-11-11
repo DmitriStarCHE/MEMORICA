@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: webar-portal
+    env: node
+    plan: free
+    region: ohio  # or frankfurt, oregon, singapore
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 18.17.0
+    healthCheckPath: /api/status
+    autoDeploy: true
+
+  # Optional: PostgreSQL database for production
+  # - type: postgres
+  #   name: webar-db
+  #   plan: free
+    # ipAllowList: []  # Only allow internal connections

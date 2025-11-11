@@ -1,0 +1,46 @@
+# Логи
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Директория для зависимостей
+node_modules/
+
+# Кэш npm
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Файлы окружения
+.env
+.env.local
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Файлы IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Временные файлы
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Загруженные файлы (можно добавить, но тогда они не будут сохраняться в репозитории)
+# public/assets/
